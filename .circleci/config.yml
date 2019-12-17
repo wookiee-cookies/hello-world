@@ -8,8 +8,21 @@ jobs:
 
     steps:
       - checkout
+
       - run:
-          name: deadlinks check
+          name: requirements
           command: |
-            sudo python3 -m pip install deadlinks==0.2.0
-            deadlinks internal -R docs --fiff --no-progress --no-colors
+            sudo python3 -m pip install deadlinks
+            sudo python3 -m pip install -r requirements-docs.txt
+
+      - run:
+          name: "deadlinks: checking external service"
+          command: |
+            mkdocs serve -q &
+            deadlinks http://127.0.0.1:8000 -n10 --no-progress --no-colors
+
+      # - run:
+      #     name: "deadlinks: static files checks"
+      #     command: |
+      #       mkdocs build -d site
+      #       deadlinks internal -R site --fiff --no-progress --no-colors
