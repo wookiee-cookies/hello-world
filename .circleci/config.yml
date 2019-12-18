@@ -11,7 +11,6 @@ jobs:
     docker:
     - image: circleci/python:3.8
     working_directory: ~/repo
-
     steps:
     - checkout
     - run:
@@ -28,18 +27,15 @@ jobs:
 
     - run:
         name: "Building artifacts (Documentation)"
-        command: |
-          mkdocs build -d site/docs
-          ls -la
+        command:  mkdocs build -d site
 
     - run:
         name: "Deadlinks: checking internal (files) resource"
-        command: deadlinks internal --root=site/docs --fiff --no-progress --no-colors
+        command: deadlinks internal -n10 -r3 --root=site --fiff --no-progress --no-colors
 
     - persist_to_workspace:
         root: site
-        paths: [ "docs" ]
-
+        paths: .
 
   # Deploy to github pages.
   deploy:
@@ -49,28 +45,54 @@ jobs:
 
     steps:
     - checkout
+    - run:
+        name: Prepare branches locally
+        command: |
+          git checkout gh-pages
+          git checkout master
+
+    - run:
+        name: Set up gh-pages in worktree for easy artifact copying
+        command: |
+          mkdir ../gh-pages
+          git worktree add ../gh-pages gh-pages
+
+
     - attach_workspace:
         at: site
+
     - run:
         name: Disable jekyll builds
-        command: touch site/docs/.nojekyll
+        command: touch site/.nojekyll
+
+    - add_ssh_keys:
+        fingerprints:
+          - "cd:4e:8a:73:71:fe:86:64:cc:5d:0f:eb:dc:f5:db:88"
+
     - run:
-        name: "Installing & Setup gh-pages"
+        name: "GitHub Pages deployment"
         command: |
-          git config user.email "miaugav@ukr.net"
-          git config user.name "Anakin"
+          rm -r ../gh-pages/*
+          cp -r site/* ../gh-pages
+          cd ../gh-pages
           ls -la
-    # - run:
-    #     name: Deploy docs to gh-pages branch
-    #     command: gh-pages --dist site/docs
+          git config --global user.email "miaugav@ukr.net"
+          git config --global user.name   "CircleCI"
+          git add .
+          git commit --allow-empty -m "Build triggered by CircleCI"
+          git push -u origin gh-pages
+
 
 workflows:
   version: 2
   test-build-and-deploy:
     jobs:
-    - tests-n-builds
+    - tests-n-builds:
+        filters:
+          branches: { ignore: "gh-pages" }
+
     - deploy:
         requires:
         - tests-n-builds
         filters:
-          branches: { only: [ "master", "develop" ] }
+          branches: { only: "master" }
