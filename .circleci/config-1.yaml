@@ -1,0 +1,31 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: circleci/python:3.7
+
+    working_directory: ~/repo
+
+    steps:
+      - checkout
+
+      - run:
+          name: requirements
+          command: |
+            # sudo python3 -m pip install deadlinks
+            sudo python3 -m pip install git+https://github.com/butuzov/deadlinks@develop
+            sudo python3 -m pip install -r requirements-docs.txt
+
+      - run:
+          name: "deadlinks: checking external service"
+          command: |
+            mkdocs serve -q &
+            deadlinks http://127.0.0.1:8000 -n10 -r3 --fiff --no-progress --no-colors
+
+      - run:
+          name: "deadlinks: static files checks"
+          command: |
+            mkdocs build -d site
+            deadlinks internal --root=site -n10 -r3 --fiff --no-progress --no-colors
+
+

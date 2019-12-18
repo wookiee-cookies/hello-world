@@ -1,29 +1,76 @@
+defaults: &defaults
+  docker:
+    - image: circleci/python:3.8
+  working_directory: ~/repo
+
+
 version: 2
 jobs:
-  build:
-    docker:
-      - image: circleci/python:3.7
 
+  tests-n-builds: # Tests : Installing requirements and running initial test (against web server)
+    docker:
+    - image: circleci/python:3.8
     working_directory: ~/repo
 
     steps:
-      - checkout
+    - checkout
+    - run:
+        name: "Python: install requirements"
+        command: |
+          sudo python3 -m pip install git+https://github.com/butuzov/deadlinks@develop
+          sudo python3 -m pip install -r requirements-docs.txt
 
-      - run:
-          name: requirements
-          command: |
-            # sudo python3 -m pip install deadlinks
-            sudo python3 -m pip install git+https://github.com/butuzov/deadlinks@develop
-            sudo python3 -m pip install -r requirements-docs.txt
+    - run:
+        name: "Deadlinks: checking external (web) resource"
+        command: |
+          mkdocs serve -q &
+          deadlinks http://127.0.0.1:8000 -n10 -r3 --fiff --no-progress --no-colors
 
-      - run:
-          name: "deadlinks: checking external service"
-          command: |
-            mkdocs serve -q &
-            deadlinks http://127.0.0.1:8000 -n10 -r3 --fiff --no-progress --no-colors
+    - run:
+        name: "Building artifacts (Documentation)"
+        command: |
+          mkdocs build -d site/docs
+          ls -la
 
-      - run:
-          name: "deadlinks: static files checks"
-          command: |
-            mkdocs build -d site
-            deadlinks internal --root=site -n10 -r3 --fiff --no-progress --no-colors
+    - run:
+        name: "Deadlinks: checking internal (files) resource"
+        command: deadlinks internal --root=site/docs --fiff --no-progress --no-colors
+
+    - persist_to_workspace:
+        root: site
+        paths: [ "docs" ]
+
+
+  # Deploy to github pages.
+  deploy:
+    docker:
+    - image: circleci/node:12.13
+    working_directory: ~/repo
+
+    steps:
+    - checkout
+    - attach_workspace:
+        at: site
+    - run:
+        name: Disable jekyll builds
+        command: touch site/docs/.nojekyll
+    - run:
+        name: "Installing & Setup gh-pages"
+        command: |
+          git config user.email "miaugav@ukr.net"
+          git config user.name "Anakin"
+          ls -la
+    # - run:
+    #     name: Deploy docs to gh-pages branch
+    #     command: gh-pages --dist site/docs
+
+workflows:
+  version: 2
+  test-build-and-deploy:
+    jobs:
+    - tests-n-builds
+    - deploy:
+        requires:
+        - tests-n-builds
+        filters:
+          branches: { only: [ "master", "develop" ] }
